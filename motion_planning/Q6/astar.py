@@ -43,19 +43,27 @@ def get_neighbors_coordinates(current_vertex, exploration_grid):
 
     return neighbors_coords
 
-def cost_to_come(cost_grid, vertex):
-    # REDUNDANT
-    cost_to_come = cost_grid[vertex[0], vertex[1]] + 1 # Only exploring nextdoor neighbour hence +1 distance always
+def cost_to_go(heuristic, vertex, goal):
 
-    return cost_to_come
+    if heuristic == "zero":
+        cost_to_go = 0
+    elif heuristic == "euclidean":
+        cost_to_go = np.linalg.norm(vertex - goal)
+    elif heuristic == "inflated":
+        cost_to_go = 100 * np.linalg.norm(vertex - goal)
+    else:
+        raise ValueError("Incompatible Heuristic!1")
 
-def astar(start, goal, grid_size, obstacles):
+    return cost_to_go
+
+def astar(start, goal, grid_size, obstacles, heuristic):
 
     cost_grid = initialise_cost_grid(grid_size, start)
     exploration_grid = initialise_exploration_grid(grid_size, obstacles)
 
     current_vertex = start
     came_from = {}
+    expanded_vertices = 0
 
     while tuple(current_vertex) != tuple(goal) and np.any(exploration_grid == 1):
 
@@ -64,14 +72,19 @@ def astar(start, goal, grid_size, obstacles):
         neighbours = get_neighbors_coordinates(current_vertex, exploration_grid)
 
         for neighbour in neighbours:
-            if neighbour_cost_to_come < cost_grid[neighbour[0], neighbour[1]]:
-                cost_grid[neighbour[0], neighbour[1]] = neighbour_cost_to_come
+
+            neighbour_cost_to_go = cost_to_go(heuristic, neighbour, goal)
+            neighbour_total_cost = neighbour_cost_to_come + neighbour_cost_to_go
+
+            if neighbour_total_cost < cost_grid[neighbour[0], neighbour[1]]:
+                cost_grid[neighbour[0], neighbour[1]] = neighbour_total_cost
                 came_from[tuple(neighbour)] = tuple(current_vertex)
         
         exploration_grid[current_vertex[0], current_vertex[1]] = 0
 
         masked_cost_grid = np.where(exploration_grid == 1, cost_grid, np.inf)
         current_vertex = np.unravel_index(np.argmin(masked_cost_grid), masked_cost_grid.shape)
+        expanded_vertices += 1
 
     path = []
     if current_vertex[0] == goal[0] and current_vertex[1] == goal[1]:
@@ -81,14 +94,15 @@ def astar(start, goal, grid_size, obstacles):
             current_vertex = came_from[current_vertex]
         path.append(tuple(start))
         path.reverse()
+        total_cost = len(path) - 1
     else:
-        print("Error!")
+        print("Could not find a solution!")
 
-    return path, exploration_grid
+    return path, exploration_grid, expanded_vertices, total_cost
 
-def visualize(grid_size, start, goal, obstacles, path):
+def visualize(grid_size, start, goal, obstacles, path, expanded_vertices, total_cost):
     """Visualizes the grid, obstacles, and the found path using Matplotlib."""
-    fig, ax = plt.subplots(figsize=(8, 8))
+    _, ax = plt.subplots(figsize=(8, 8))
 
     # Create empty grid
     grid = np.ones((grid_size, grid_size))
@@ -119,12 +133,19 @@ def visualize(grid_size, start, goal, obstacles, path):
     ax.set_yticklabels([])
     ax.grid(True, color="gray", linestyle="--", linewidth=0.5)
     ax.legend()
+    ax.set_title(f"Path using {heuristic} heuristic")
+    ax.text(0.05, 0.95, f"Expanded Vertices: {expanded_vertices}", transform=ax.transAxes,
+            fontsize=12, verticalalignment='top', horizontalalignment='left', color='white')
+    ax.text(0.05, 0.90, f"Total Cost: {total_cost:.2f}", transform=ax.transAxes,
+            fontsize=12, verticalalignment='top', horizontalalignment='left', color='white')
     plt.show()
 
+# Remember to subtract 1 from all coordinates as indexing starts from 0
 grid_size = 19
-start = np.array((5, 10))
-goal = np.array((15, 10))
-obstacles = [(10, 5, 10, 15)]
+start = np.array((4, 9))
+goal = np.array((14, 9))
+obstacles = [(9, 4, 9, 14)]
+heuristic = "zero" # "zero", "euclidean", or "inflated"
 
-path, exploration_grid = astar(start, goal, grid_size, obstacles)
-visualize(grid_size, start, goal, obstacles, path)
+path, exploration_grid, expanded_vertices, total_cost = astar(start, goal, grid_size, obstacles, heuristic)
+visualize(grid_size, start, goal, obstacles, path, expanded_vertices, total_cost)

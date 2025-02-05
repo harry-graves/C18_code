@@ -1,10 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import heapq
 
 def initialise_exploration_grid(grid_size, obstacles):
     """
     Initializes the exploration grid with obstacles.
     Obstacles can be defined as single points or lines between two points.
+    Obstacle is defined as (x1, y1, x2, y2) i.e. the start and end coordinates of the obstacle
     """
     exploration_grid = np.ones((grid_size, grid_size))
 
@@ -60,12 +62,19 @@ def astar(start, goal, grid_size, obstacles, heuristic):
 
     cost_grid = initialise_cost_grid(grid_size, start)
     exploration_grid = initialise_exploration_grid(grid_size, obstacles)
+    
+    # Priority queue storing (total_cost, (x, y))
+    frontier = []
+    heapq.heappush(frontier, (0, tuple(start)))
 
-    current_vertex = start
     came_from = {}
     expanded_vertices = 0
 
-    while tuple(current_vertex) != tuple(goal) and np.any(exploration_grid == 1):
+    while frontier:
+        _, current_vertex = heapq.heappop(frontier) # Pop node with lowest cost from the heap
+
+        if current_vertex == tuple(goal):
+            break
 
         cost_to_come = cost_grid[current_vertex[0], current_vertex[1]]
         neighbour_cost_to_come = cost_to_come + 1
@@ -79,6 +88,7 @@ def astar(start, goal, grid_size, obstacles, heuristic):
             if neighbour_total_cost < cost_grid[neighbour[0], neighbour[1]]:
                 cost_grid[neighbour[0], neighbour[1]] = neighbour_total_cost
                 came_from[tuple(neighbour)] = tuple(current_vertex)
+                heapq.heappush(frontier, (neighbour_total_cost, neighbour))                
         
         exploration_grid[current_vertex[0], current_vertex[1]] = 0
 
@@ -87,8 +97,7 @@ def astar(start, goal, grid_size, obstacles, heuristic):
         expanded_vertices += 1
 
     path = []
-    if current_vertex[0] == goal[0] and current_vertex[1] == goal[1]:
-        print("Made it!")
+    if current_vertex == tuple(goal):
         while current_vertex in came_from:
             path.append(current_vertex)
             current_vertex = came_from[current_vertex]
@@ -97,6 +106,7 @@ def astar(start, goal, grid_size, obstacles, heuristic):
         total_cost = len(path) - 1
     else:
         print("Could not find a solution!")
+        total_cost = "No path found!"
 
     return path, exploration_grid, expanded_vertices, total_cost
 
@@ -136,7 +146,7 @@ def visualize(grid_size, start, goal, obstacles, path, expanded_vertices, total_
     ax.set_title(f"Path using {heuristic} heuristic")
     ax.text(0.05, 0.95, f"Expanded Vertices: {expanded_vertices}", transform=ax.transAxes,
             fontsize=12, verticalalignment='top', horizontalalignment='left', color='white')
-    ax.text(0.05, 0.90, f"Total Cost: {total_cost:.2f}", transform=ax.transAxes,
+    ax.text(0.05, 0.90, f"Total Cost: {total_cost}", transform=ax.transAxes,
             fontsize=12, verticalalignment='top', horizontalalignment='left', color='white')
     plt.show()
 

@@ -6,7 +6,7 @@ def add_sample(grid_size):
     x = np.random.random_sample() * grid_size
     y = np.random.random_sample() * grid_size
 
-    return tuple(x, y)
+    return tuple((x, y))
 
 def add_new_node(nearest_node, sample, max_distance):
 
@@ -19,7 +19,7 @@ def add_new_node(nearest_node, sample, max_distance):
 
     return tuple(new_node)
 
-def sample_collision_check(sample, obstacles):
+def node_collision_check(sample, obstacles):
 
     for (x_min, y_min, x_max, y_max) in obstacles:
         if x_min <= sample[0] <= x_max and y_min <= sample[1] <= y_max:
@@ -30,8 +30,9 @@ def sample_collision_check(sample, obstacles):
 def find_nearest_node(nodes, sample, grid_size):
 
     distance = grid_size
+    nearest_node = nodes[0]
     for node in nodes:
-        new_distance = np.norm(node - sample)
+        new_distance = np.linalg.norm(np.array(node) - np.array(sample))
         if new_distance < distance:
             distance = new_distance
             nearest_node = node
@@ -45,8 +46,12 @@ def edge_collision_check(vertex_1, vertex_2, obstacles, step_size = 0.1):
     """
     x1, y1 = vertex_1
     x2, y2 = vertex_2
+
     distance = np.linalg.norm(np.array(vertex_2) - np.array(vertex_1))
-    num_steps = int(distance / step_size)
+    if distance == 0:
+        return False
+
+    num_steps = max(int(distance / step_size), 1)
 
     for i in range(num_steps + 1):
         # Interpolate point along the line
@@ -54,8 +59,8 @@ def edge_collision_check(vertex_1, vertex_2, obstacles, step_size = 0.1):
         x = (1 - alpha) * x1 + alpha * x2
         y = (1 - alpha) * y1 + alpha * y2
 
-        for (x_min, y_min, width, height) in obstacles:
-            if x_min <= x <= x_min + width and y_min <= y <= y_min + height:
+        for (x_min, y_min, x_max, y_max) in obstacles:
+            if x_min <= x <= x_max and y_min <= y <= y_max:
                 return True
 
     return False
@@ -63,19 +68,27 @@ def edge_collision_check(vertex_1, vertex_2, obstacles, step_size = 0.1):
 def rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_size, max_iterations):
 
     nodes = [start]
-    distance_to_goal = np.linalg.norm(start - goal)
+    distance_to_goal = np.linalg.norm(np.array(start) - np.array(goal))
+
+    if distance_to_goal < max_distance:
+        return [start, goal], [start, goal], {goal: start}
+
     i = 0
     came_from = {start: None}
 
-    while distance_to_goal > max_distance:
+    while distance_to_goal > max_distance and i <= max_iterations:
 
         sample = add_sample(grid_size)
-        collision = sample_collision_check(sample, obstacles)
+        collision = node_collision_check(sample, obstacles)
         if collision == True:
             continue
 
         nearest_node = find_nearest_node(nodes, sample, grid_size)
         new_node = add_new_node(nearest_node, sample, max_distance)
+        collision = node_collision_check(new_node, obstacles)
+        if collision == True:
+            continue
+
         collision = edge_collision_check(new_node, nearest_node, obstacles, edge_collision_check_size)
         if collision == True:
             continue
@@ -83,15 +96,13 @@ def rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_si
         nodes.append(new_node)
         came_from[new_node] = nearest_node
 
-        distance_to_goal = np.linalg.norm(new_node - goal)
+        distance_to_goal = np.linalg.norm(np.array(new_node) - np.array(goal))
         if distance_to_goal < max_distance:
             nodes.append(goal)
             came_from[goal] = new_node
             break
+
         i+=1
-        if i >= max_iterations:
-            print("Exceeded max iterations!")
-            break
 
     path = [goal]
     if goal in came_from:
@@ -103,16 +114,17 @@ def rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_si
         path = None
         print("Could not find a path!")
     
-    return nodes, path
+    return nodes, path, came_from
 
-def visualize_rrt(grid_size, start, goal, obstacles, nodes, path):
+def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
     """
     Visualizes the RRT tree, obstacles, and the final path.
     """
-    fig, ax = plt.subplots(figsize=(8, 8))
+    _, ax = plt.subplots(figsize=(8, 8))
     
-    # Plot obstacles
-    for (x_min, y_min, width, height) in obstacles:
+    for (x_min, y_min, x_max, y_max) in obstacles:
+        width = x_max - x_min
+        height = y_max - y_min
         ax.add_patch(plt.Rectangle((x_min, y_min), width, height, color='gray'))
 
     # Plot all RRT nodes
@@ -120,7 +132,7 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path):
         ax.scatter(node[0], node[1], color='blue', s=5)  # Small blue dots
 
     # Plot edges (tree structure)
-    for child, parent in parent_map.items():
+    for child, parent in came_from.items():
         if parent is not None:
             plt.plot([parent[0], child[0]], [parent[1], child[1]], color="blue", linewidth=0.5)
 
@@ -143,11 +155,12 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path):
     plt.show()
 
 grid_size = 19
-start = np.array((4, 9))
-goal = np.array((14, 9))
+start = tuple((4, 9))
+goal = tuple((14, 9))
 obstacles = [(9, 4, 10, 14)]
 max_distance = 1
-edge_collision_check_size = 0.2
+edge_collision_check_size = 0.05
 max_iterations = 1000
-nodes, path = rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_size, max_iterations)
-visualize_rrt(grid_size, start, goal, obstacles, nodes, path)
+
+nodes, path, came_from = rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_size, max_iterations)
+visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from)

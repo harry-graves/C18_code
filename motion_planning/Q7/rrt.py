@@ -68,8 +68,12 @@ def edge_collision_check(vertex_1, vertex_2, obstacles, step_size = 0.1):
 def calculate_path_length(path):
 
     path_length = 0
-    for i in range(len(path) - 1):
-        path_length += np.linalg.norm(np.array(path[i]) - np.array(path[i + 1]))
+
+    if path is None:
+        path_length = None
+    else:
+        for i in range(len(path) - 1):
+            path_length += np.linalg.norm(np.array(path[i]) - np.array(path[i + 1]))
 
     return path_length
 
@@ -157,7 +161,10 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
     path_length = calculate_path_length(path)
     text_x, text_y = 1, grid_size - 1  # Position for text
     ax.text(text_x, text_y, f"Nodes Expanded: {len(nodes)}", fontsize=12, color="black")
-    ax.text(text_x, text_y - 1, f"Path Length: {path_length:.2f}", fontsize=12, color="black")
+    if path_length is not None:
+        ax.text(text_x, text_y - 1, f"Path Length: {path_length:.2f}", fontsize=12, color="black")
+    else:
+        ax.text(text_x, text_y - 1, f"Path Length: No path found!", fontsize=12, color="black")
 
     # Formatting
     ax.set_xlim(0, grid_size)
@@ -169,9 +176,10 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
     plt.show()
 
 grid_size = 19
-start = tuple((4, 9))
-goal = tuple((14, 9))
-obstacles = [(9, 4, 10, 14)]
+start = tuple((4.5, 9.5))
+goal = tuple((14.5, 9.5))
+# obstacles = [(9, 1, 10, 18)]
+obstacles = [(2, 6, 8, 7), (2, 12, 8, 13), (7, 7, 8, 12)] # (xmin, ymin, xmax, ymax)
 max_distance = 1
 edge_collision_check_size = 0.05
 max_iterations = 1000

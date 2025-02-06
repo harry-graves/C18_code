@@ -154,6 +154,7 @@ def visualize_astar(grid_size, start, goal, obstacles, path, expanded_vertices, 
 grid_size = 19
 start = np.array((4, 9))
 goal = np.array((14, 9))
+# obstacles = [(9, 1, 10, 18)]
 obstacles = [(8, 7, 8, 11), (2, 6, 8, 6), (2, 12, 8, 12)] # (xmin, ymin, xmax, ymax)
 heuristic = "inflated" # "zero", "euclidean", or "inflated"
 

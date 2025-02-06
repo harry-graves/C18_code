@@ -110,7 +110,7 @@ def astar(start, goal, grid_size, obstacles, heuristic):
 
     return path, exploration_grid, expanded_vertices, total_cost
 
-def visualize(grid_size, start, goal, obstacles, path, expanded_vertices, total_cost):
+def visualize_astar(grid_size, start, goal, obstacles, path, expanded_vertices, total_cost):
     """Visualizes the grid, obstacles, and the found path using Matplotlib."""
     _, ax = plt.subplots(figsize=(8, 8))
 
@@ -158,4 +158,4 @@ obstacles = [(9, 4, 9, 14)]
 heuristic = "zero" # "zero", "euclidean", or "inflated"
 
 path, exploration_grid, expanded_vertices, total_cost = astar(start, goal, grid_size, obstacles, heuristic)
-visualize(grid_size, start, goal, obstacles, path, expanded_vertices, total_cost)
+visualize_astar(grid_size, start, goal, obstacles, path, expanded_vertices, total_cost)

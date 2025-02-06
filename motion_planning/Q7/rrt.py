@@ -65,6 +65,14 @@ def edge_collision_check(vertex_1, vertex_2, obstacles, step_size = 0.1):
 
     return False
 
+def calculate_path_length(path):
+
+    path_length = 0
+    for i in range(len(path) - 1):
+        path_length += np.linalg.norm(np.array(path[i]) - np.array(path[i + 1]))
+
+    return path_length
+
 def rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_size, max_iterations):
 
     nodes = [start]
@@ -144,6 +152,12 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
     # Mark start and goal
     ax.scatter(*start, color="green", s=100, label="Start", edgecolors="black")
     ax.scatter(*goal, color="red", s=100, label="Goal", edgecolors="black")
+
+    # Performance metrics
+    path_length = calculate_path_length(path)
+    text_x, text_y = 1, grid_size - 1  # Position for text
+    ax.text(text_x, text_y, f"Nodes Expanded: {len(nodes)}", fontsize=12, color="black")
+    ax.text(text_x, text_y - 1, f"Path Length: {path_length:.2f}", fontsize=12, color="black")
 
     # Formatting
     ax.set_xlim(0, grid_size)

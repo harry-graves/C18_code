@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.interpolate import RegularGridInterpolator
 
 def rho(point_1, point_2):
     return np.linalg.norm(point_1 - point_2)
@@ -44,40 +43,76 @@ def calculate_overall_potential(grid_size, obstacles, obstacle_radius, goal):
     for i in range(grid_size):
         for j in range(grid_size):
             coord = np.array((i, j))
-            potential[i, j] += goal_potential(coord, goal)
+            potential[j, i] += goal_potential(coord, goal)
             for obstacle in obstacles:
-                potential[i, j] += obstacle_potential(coord, obstacle, obstacle_radius)
+                potential[j, i] += obstacle_potential(coord, obstacle, obstacle_radius)
 
     return potential
 
 def calculate_grad(potential):
     
-    dU_dx, dU_dy = np.gradient(potential)
+    dU_dy, dU_dx = np.gradient(potential)
 
     return dU_dx, dU_dy
 
+def bilinear_interpolation(grid, x, y):
+    """
+    Perform bilinear interpolation for a given float coordinate (x, y) on a 2D integer grid.
+    
+    :param grid: 2D NumPy array representing the integer grid.
+    :param x: Floating point x-coordinate.
+    :param y: Floating point y-coordinate.
+    :return: Interpolated value at (x, y).
+    """
+    h, w = grid.shape
+        
+    if np.floor(x) == x:
+        x0 = int(x)
+        x1 = min(x0 + 1, w - 1)
+    else:
+        x0, x1 = int(np.floor(x)), int(np.ceil(x))
+    if np.floor(y) == y: 
+        y0 = int(y)
+        y1 = min(y0 + 1, h - 1)
+    else:
+        y0, y1 = int(np.floor(y)), int(np.ceil(y))
+    
+    # Ensure points are within bounds
+    x0 = max(0, min(x0, w - 1))
+    x1 = max(0, min(x1, w - 1))
+    y0 = max(0, min(y0, h - 1))
+    y1 = max(0, min(y1, h - 1))
+    
+    # Get values at the four surrounding grid points
+    Q11 = grid[y0, x0]  # Top-left
+    Q21 = grid[y0, x1]  # Top-right
+    Q12 = grid[y1, x0]  # Bottom-left
+    Q22 = grid[y1, x1]  # Bottom-right
+    
+    # Compute interpolation weights
+    dx, dy = x - x0, y - y0
+    
+    # Interpolate in x direction
+    R1 = (1 - dx) * Q11 + dx * Q21
+    R2 = (1 - dx) * Q12 + dx * Q22
+    
+    # Interpolate in y direction
+    P = (1 - dy) * R1 + dy * R2
+    
+    return P
+
 def calculate_new_position(position, dU_dx, dU_dy, step_size, grid_size):
     position_x = position[0]
-    position_y = position[1]
+    position_y = position[1]    
 
-    dU_dx_point = int(dU_dx[position_x, position_y])
-    dU_dy_point = int(dU_dy[position_x, position_y])
+    dU_dx_point = bilinear_interpolation(dU_dx, position_x, position_y)
+    dU_dy_point = bilinear_interpolation(dU_dy, position_x, position_y)
 
-    position[0] += int(step_size * -dU_dx_point)
-    position[1] += int(step_size * -dU_dy_point)
+    new_position = position.copy()
+    new_position[0] = np.clip(new_position[0] + step_size * -dU_dx_point, 0, grid_size - 1)
+    new_position[1] = np.clip(new_position[1] + step_size * -dU_dy_point, 0, grid_size - 1)
 
-    # Ensure position doesn't exceed bounds
-    if position[0] > grid_size - 1:
-        position[0] = grid_size - 1
-    elif position[0] < 0:
-        position[0] = 0
-
-    if position[1] > grid_size - 1:
-        position[1] = grid_size - 1
-    elif position[1] < 0:
-        position[1] = 0
-
-    return position
+    return new_position
 
 def check_if_stuck(path, position):
     
@@ -95,7 +130,7 @@ def potential_field_planner(start, goal, dU_dx, dU_dy, step_size, grid_size):
     
     distance_to_goal = np.linalg.norm(start - goal)
     path = []
-    position = start.copy()
+    position = np.array(start, dtype=float)
     path.append(position.copy())
 
     while distance_to_goal > 10:
@@ -132,7 +167,10 @@ def main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size):
     path = potential_field_planner(start, goal, dU_dx, dU_dy, step_size, grid_size)
 
     path_x, path_y = np.array(path)[:, 0], np.array(path)[:, 1]
-    path_z = potential[path_y, path_x]
+    path_z = []
+    for x, y in zip(path_x, path_y):
+        z = bilinear_interpolation(potential, x, y)
+        path_z.append(z)
 
     # Create 3D plot
     fig = plt.figure(figsize=(8, 6))
@@ -151,7 +189,7 @@ def main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size):
     # Labels and title
     ax.set_xlabel("X-axis")
     ax.set_ylabel("Y-axis")
-    ax.set_zlabel("Potential")
+    ax.set_zlabel("Potential Field Value")
     ax.set_title("Potential Field with Path in 3D")
     ax.legend()
 
@@ -160,7 +198,7 @@ def main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size):
 grid_size = 100
 num_obstacles = 10
 obstacle_radius = 3
-random_seed = 1
-step_size = 0.2
+random_seed = 300
+step_size = 0.005
 
 main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size)

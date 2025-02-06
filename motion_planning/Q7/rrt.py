@@ -2,33 +2,42 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def add_sample(grid_size):
-
+    """
+    Generates a random sample coordinate anywhere within the grid
+    """
     x = np.random.random_sample() * grid_size
     y = np.random.random_sample() * grid_size
 
-    return tuple((x, y))
+    return (x, y)
 
 def add_new_node(nearest_node, sample, max_distance):
-
+    """
+    Adds a new node in the direction of the sample from the nearest existing node
+    How far along this direction is determined by max_distance
+    """
     direction = np.array(sample) - np.array(nearest_node)
     length = np.linalg.norm(direction)
     if length < max_distance:
-        return tuple(sample)
+        return sample
     direction = (direction / length) * max_distance
-    new_node = np.array(nearest_node) + direction
+    new_node = tuple(np.array(nearest_node) + direction)
 
-    return tuple(new_node)
+    return new_node
 
-def node_collision_check(sample, obstacles):
-
+def node_collision_check(node, obstacles):
+    """
+    Checks if the node is in collision with any objects
+    """
     for (x_min, y_min, x_max, y_max) in obstacles:
-        if x_min <= sample[0] <= x_max and y_min <= sample[1] <= y_max:
+        if x_min <= node[0] <= x_max and y_min <= node[1] <= y_max:
             return True
         
     return False
 
 def find_nearest_node(nodes, sample, grid_size):
-
+    """
+    Finds the nearest node to a new sample so that they may be connected with an edge
+    """
     distance = grid_size
     nearest_node = nodes[0]
     for node in nodes:
@@ -66,7 +75,9 @@ def edge_collision_check(vertex_1, vertex_2, obstacles, step_size = 0.1):
     return False
 
 def calculate_path_length(path):
-
+    """
+    Calculates the euclidan length of the final path
+    """
     path_length = 0
 
     if path is None:
@@ -129,9 +140,7 @@ def rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_si
     return nodes, path, came_from
 
 def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
-    """
-    Visualizes the RRT tree, obstacles, and the final path.
-    """
+
     _, ax = plt.subplots(figsize=(8, 8))
     
     for (x_min, y_min, x_max, y_max) in obstacles:
@@ -139,11 +148,11 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
         height = y_max - y_min
         ax.add_patch(plt.Rectangle((x_min, y_min), width, height, color='gray'))
 
-    # Plot all RRT nodes
+    # Plot all nodes
     for node in nodes:
-        ax.scatter(node[0], node[1], color='blue', s=5)  # Small blue dots
+        ax.scatter(node[0], node[1], color='blue', s=5)
 
-    # Plot edges (tree structure)
+    # Plot edges
     for child, parent in came_from.items():
         if parent is not None:
             plt.plot([parent[0], child[0]], [parent[1], child[1]], color="blue", linewidth=0.5)
@@ -157,7 +166,7 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
     ax.scatter(*start, color="green", s=100, label="Start", edgecolors="black")
     ax.scatter(*goal, color="red", s=100, label="Goal", edgecolors="black")
 
-    # Performance metrics
+    # Plot performance metrics
     path_length = calculate_path_length(path)
     text_x, text_y = 1, grid_size - 1  # Position for text
     ax.text(text_x, text_y, f"Nodes Expanded: {len(nodes)}", fontsize=12, color="black")
@@ -166,7 +175,6 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
     else:
         ax.text(text_x, text_y - 1, f"Path Length: No path found!", fontsize=12, color="black")
 
-    # Formatting
     ax.set_xlim(0, grid_size)
     ax.set_ylim(0, grid_size)
     ax.set_xticks([])
@@ -176,10 +184,10 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
     plt.show()
 
 grid_size = 19
-start = tuple((4.5, 9.5))
-goal = tuple((14.5, 9.5))
-# obstacles = [(9, 1, 10, 18)]
-obstacles = [(2, 6, 8, 7), (2, 12, 8, 13), (7, 7, 8, 12)] # (xmin, ymin, xmax, ymax)
+start = (4.5, 9.5) # Add 0.5 to be in the middle of the square
+goal = (14.5, 9.5)
+# obstacles = [(9, 1, 10, 18)]  # (x_min, y_min, x_max, y_max)
+obstacles = [(2, 6, 8, 7), (2, 12, 8, 13), (7, 7, 8, 12)]
 max_distance = 1
 edge_collision_check_size = 0.05
 max_iterations = 1000

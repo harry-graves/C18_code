@@ -4,20 +4,16 @@ import heapq
 
 def initialise_exploration_grid(grid_size, obstacles):
     """
-    Initializes the exploration grid with obstacles.
-    Obstacles can be defined as single points or lines between two points.
-    Obstacle is defined as (x1, y1, x2, y2) i.e. the start and end coordinates of the obstacle
+    Initializes the "exploration grid"
+    This is a grid of 0s for unexplored free space, and 1s for explored space or obstacles
+    Obstacles are rectangles defined by their extreme coordinates: (x_min, y_min, x_max, y_max)
+    Each obstacle i unpacked from the list of obstacles
     """
     exploration_grid = np.ones((grid_size, grid_size))
 
     for obstacle in obstacles:
-        x1, y1, x2, y2 = obstacle  # Extract line endpoints
-        if x1 == x2:  # Vertical line
-            exploration_grid[x1, min(y1, y2):max(y1, y2) + 1] = 0
-        elif y1 == y2:  # Horizontal line
-            exploration_grid[min(x1, x2):max(x1, x2) + 1, y1] = 0
-        else:
-            raise ValueError("Only horizontal or vertical obstacles are supported.")
+        x_min, y_min, x_max, y_max = obstacle
+        exploration_grid[x_min : x_max + 1, y_min : y_max + 1] = 0
 
     return exploration_grid
 
@@ -46,13 +42,18 @@ def get_neighbors_coordinates(current_vertex, exploration_grid):
     return neighbors_coords
 
 def cost_to_go(heuristic, vertex, goal):
-
+    """
+    Calculates the cost to go from the specified vertex to the goal by one of three heuristics.
+    "zero" - reduces A* to Djikstra's algorithm
+    "euclidean" - euclidean distance to the goal
+    "inflated" - euclidean multiplied by some value (used here is 100) to bias movement towards the goal
+    """
     if heuristic == "zero":
         cost_to_go = 0
     elif heuristic == "euclidean":
-        cost_to_go = np.linalg.norm(vertex - goal)
+        cost_to_go = np.linalg.norm(np.array(vertex) - np.array(goal))
     elif heuristic == "inflated":
-        cost_to_go = 100 * np.linalg.norm(vertex - goal)
+        cost_to_go = 100 * np.linalg.norm(np.array(vertex) - np.array(goal))
     else:
         raise ValueError("Incompatible Heuristic!1")
 
@@ -65,30 +66,38 @@ def astar(start, goal, grid_size, obstacles, heuristic):
     
     # Priority queue storing (total_cost, (x, y))
     frontier = []
-    heapq.heappush(frontier, (0, tuple(start)))
+    heapq.heappush(frontier, (0, start))
 
     came_from = {}
     expanded_vertices = 0
+    all_paths = []
 
+    # While there are accessible nodes left to explore
     while frontier:
-        _, current_vertex = heapq.heappop(frontier) # Pop node with lowest cost from the heap
 
-        if current_vertex == tuple(goal):
+         # Pop node with lowest cost from the heap
+        _, current_vertex = heapq.heappop(frontier)
+
+        if current_vertex == goal:
             break
 
         cost_to_come = cost_grid[current_vertex[0], current_vertex[1]]
+
+        # Cost to come for all neighbours is the same since all edges are assumed to have weight 1
         neighbour_cost_to_come = cost_to_come + 1
         neighbours = get_neighbors_coordinates(current_vertex, exploration_grid)
 
         for neighbour in neighbours:
 
+            neighbour_x, neighbour_y = neighbour
             neighbour_cost_to_go = cost_to_go(heuristic, neighbour, goal)
             neighbour_total_cost = neighbour_cost_to_come + neighbour_cost_to_go
 
-            if neighbour_total_cost < cost_grid[neighbour[0], neighbour[1]]:
-                cost_grid[neighbour[0], neighbour[1]] = neighbour_total_cost
-                came_from[tuple(neighbour)] = tuple(current_vertex)
-                heapq.heappush(frontier, (neighbour_total_cost, neighbour))                
+            if neighbour_total_cost < cost_grid[neighbour_x, neighbour_y]:
+                cost_grid[neighbour_x, neighbour_y] = neighbour_total_cost
+                came_from[neighbour] = current_vertex
+                heapq.heappush(frontier, (neighbour_total_cost, neighbour))
+                all_paths.append((current_vertex, neighbour))
         
         exploration_grid[current_vertex[0], current_vertex[1]] = 0
 
@@ -96,41 +105,41 @@ def astar(start, goal, grid_size, obstacles, heuristic):
         current_vertex = np.unravel_index(np.argmin(masked_cost_grid), masked_cost_grid.shape)
         expanded_vertices += 1
 
-    path = []
-    if current_vertex == tuple(goal):
+    final_path= []
+    if current_vertex == goal:
         while current_vertex in came_from:
-            path.append(current_vertex)
+            final_path.append(current_vertex)
             current_vertex = came_from[current_vertex]
-        path.append(tuple(start))
-        path.reverse()
-        total_cost = len(path) - 1
+        final_path.append(start)
+        final_path.reverse()
+        total_cost = len(final_path) - 1
     else:
         print("Could not find a solution!")
         total_cost = "No path found!"
 
-    return path, exploration_grid, expanded_vertices, total_cost
+    return final_path, all_paths, exploration_grid, expanded_vertices, total_cost
 
-def visualize_astar(grid_size, start, goal, obstacles, path, expanded_vertices, total_cost):
-    """Visualizes the grid, obstacles, and the found path using Matplotlib."""
+def visualize_astar(grid_size, start, goal, obstacles, final_path, all_paths, expanded_vertices, total_cost):
+
     _, ax = plt.subplots(figsize=(8, 8))
 
-    # Create empty grid
-    grid = np.ones((grid_size, grid_size))
-
-    # Mark obstacles
+    # Create grid and mark obstacle locations
+    grid = np.zeros((grid_size, grid_size))
     for obstacle in obstacles:
-        x1, y1, x2, y2 = obstacle
-        if x1 == x2:  # Vertical wall
-            grid[x1, min(y1, y2):max(y1, y2) + 1] = 0
-        elif y1 == y2:  # Horizontal wall
-            grid[min(x1, x2):max(x1, x2) + 1, y1] = 0
-
+        x_min, y_min, x_max, y_max = obstacle
+        grid[x_min : x_max + 1, y_min : y_max + 1] = 1
     ax.imshow(grid.T, cmap="gray_r", origin="lower")
 
-    # Plot path
-    if path:
-        px, py = zip(*path)
-        ax.plot(px, py, marker="o", color="blue", markersize=5, label="Path")
+    # Plot all explored paths
+    for edge in all_paths:
+        node_1, node_2 = edge
+        ax.plot([node_1[0], node_2[0]], [node_1[1], node_2[1]], color="orange", linewidth=1)
+    ax.plot([], [], color="orange", linewidth=1, label="Explored Paths")
+
+    # Plot the final path
+    if final_path:
+        px, py = zip(*final_path)
+        ax.plot(px, py, marker="o", color="blue", markersize=5, label="Final Path")
 
     # Mark start and goal
     ax.scatter(*start, color="green", s=100, label="Start", edgecolors="black")
@@ -145,18 +154,18 @@ def visualize_astar(grid_size, start, goal, obstacles, path, expanded_vertices, 
     ax.legend()
     ax.set_title(f"Path using {heuristic} heuristic")
     ax.text(0.05, 0.95, f"Expanded Vertices: {expanded_vertices}", transform=ax.transAxes,
-            fontsize=12, verticalalignment='top', horizontalalignment='left', color='white')
+            fontsize=12, verticalalignment='top', horizontalalignment='left', color='black')
     ax.text(0.05, 0.90, f"Total Cost: {total_cost}", transform=ax.transAxes,
-            fontsize=12, verticalalignment='top', horizontalalignment='left', color='white')
+            fontsize=12, verticalalignment='top', horizontalalignment='left', color='black')
     plt.show()
 
 # Remember to subtract 1 from all coordinates as indexing starts from 0
 grid_size = 19
-start = np.array((4, 9))
-goal = np.array((14, 9))
-# obstacles = [(9, 1, 10, 18)]
-obstacles = [(8, 7, 8, 11), (2, 6, 8, 6), (2, 12, 8, 12)] # (xmin, ymin, xmax, ymax)
-heuristic = "inflated" # "zero", "euclidean", or "inflated"
+start = (4, 9)
+goal = (14, 9)
+# obstacles = [(9, 4, 9, 14)] # (x_min, y_min, x_max, y_max)
+obstacles = [(8, 7, 8, 11), (2, 6, 8, 6), (2, 12, 8, 12)]
+heuristic = "euclidean" # "zero", "euclidean", or "inflated"
 
-path, exploration_grid, expanded_vertices, total_cost = astar(start, goal, grid_size, obstacles, heuristic)
-visualize_astar(grid_size, start, goal, obstacles, path, expanded_vertices, total_cost)
+final_path, all_paths, exploration_grid, expanded_vertices, total_cost = astar(start, goal, grid_size, obstacles, heuristic)
+visualize_astar(grid_size, start, goal, obstacles, final_path, all_paths, expanded_vertices, total_cost)

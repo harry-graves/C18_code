@@ -2,16 +2,32 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def rho(point_1, point_2):
+    """
+    Function to compute the distance between two points
+    Represents the function rho from the lecture notes
+    """
     return np.linalg.norm(point_1 - point_2)
 
-def goal_potential(point_1, point_2):
-    distance = rho(point_1, point_2)
-    return 0.5 * distance ** 2
+def goal_potential(point, goal):
+    """
+    Calculates the goal's contribution to the potential of a given point
+    Based on the distance between the point and the goal
+    Uses the inverse square law scaled by 0.5
+    """
+    distance = rho(point, goal)
+    potential = 0.5 * distance ** 2
 
-def obstacle_potential(point_1, point_obstacle, obstacle_radius):
+    return potential
+
+def obstacle_potential(point, point_obstacle, obstacle_radius):
+    """
+    Calculates an obstacle's contribution to the potential of a given point
+    Based on the distance between the point and nearby obstacles
+    Uses the function from the lecture notes
+    """
     n = 10000
     min_distance = 25
-    distance = rho(point_1, point_obstacle)
+    distance = rho(point, point_obstacle)
     if distance <= obstacle_radius:
         potential = n
     elif distance <= min_distance:
@@ -22,14 +38,13 @@ def obstacle_potential(point_1, point_obstacle, obstacle_radius):
     return potential
 
 def generate_world(grid_size, num_obstacles, random_seed):
+    """
+    Randomly generates obstacles and a start and end point somewhere in either corner
+    """
     np.random.seed(random_seed)
-    
-    # Start somewhere at top left, end somewhere at bottom right
     start = np.array((np.random.randint(0, 10), np.random.randint(0, 10)))
     goal = np.array((np.random.randint(grid_size-10, grid_size), np.random.randint(grid_size-10, grid_size)))
-    print(f"Goal: {goal}")
 
-    # Randomly locate obstacles
     obstacles = []
     for _ in range(num_obstacles):
         obstacles.append(np.array((np.random.randint(0, grid_size), np.random.randint(0, grid_size))))
@@ -37,8 +52,9 @@ def generate_world(grid_size, num_obstacles, random_seed):
     return start, goal, obstacles
 
 def calculate_overall_potential(grid_size, obstacles, obstacle_radius, goal):
-    
-    # Compute potential field
+    """
+    Sums the potential contributions from all obstacles and the goal
+    """
     potential = np.zeros((grid_size, grid_size))
     for i in range(grid_size):
         for j in range(grid_size):
@@ -50,7 +66,10 @@ def calculate_overall_potential(grid_size, obstacles, obstacle_radius, goal):
     return potential
 
 def calculate_grad(potential):
-    
+    """
+    Grad operator
+    Returns matrices of size grid_size x grid_size containing x and y gradients at each point
+    """
     dU_dy, dU_dx = np.gradient(potential)
 
     return dU_dx, dU_dy
@@ -58,11 +77,7 @@ def calculate_grad(potential):
 def bilinear_interpolation(grid, x, y):
     """
     Perform bilinear interpolation for a given float coordinate (x, y) on a 2D integer grid.
-    
-    :param grid: 2D NumPy array representing the integer grid.
-    :param x: Floating point x-coordinate.
-    :param y: Floating point y-coordinate.
-    :return: Interpolated value at (x, y).
+    Converts the discrete grid into a continuous space
     """
     h, w = grid.shape
         
@@ -102,6 +117,9 @@ def bilinear_interpolation(grid, x, y):
     return P
 
 def calculate_new_position(position, dU_dx, dU_dy, step_size, grid_size):
+    """
+    Calculates the new position based on the current position and local gradients
+    """
     position_x = position[0]
     position_y = position[1]    
 
@@ -115,7 +133,9 @@ def calculate_new_position(position, dU_dx, dU_dy, step_size, grid_size):
     return new_position
 
 def check_if_stuck(path, position):
-    
+    """
+    Checks if the position is constant or oscillating back and forth between two positions
+    """
     last_pose = path[-1]
     if last_pose[0] == position[0] and last_pose[1] == position[1]:
         return True
@@ -152,25 +172,7 @@ def potential_field_planner(start, goal, dU_dx, dU_dy, step_size, grid_size):
 
     return path
 
-def main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size):
-
-    x = np.arange(grid_size)
-    y = np.arange(grid_size)
-    X, Y = np.meshgrid(x, y)
-
-    start, goal, obstacles = generate_world(grid_size, num_obstacles, random_seed)
-
-    potential = calculate_overall_potential(grid_size, obstacles, obstacle_radius, goal)
-
-    dU_dx, dU_dy = calculate_grad(potential)
-
-    path = potential_field_planner(start, goal, dU_dx, dU_dy, step_size, grid_size)
-
-    path_x, path_y = np.array(path)[:, 0], np.array(path)[:, 1]
-    path_z = []
-    for x, y in zip(path_x, path_y):
-        z = bilinear_interpolation(potential, x, y)
-        path_z.append(z)
+def visualise_potential_planner(X, Y, potential, path_x, path_y, path_z, start, goal):
 
     # Create 3D plot
     fig = plt.figure(figsize=(8, 6))
@@ -195,10 +197,33 @@ def main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size):
 
     plt.show()
 
+def main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size):
+
+    x = np.arange(grid_size)
+    y = np.arange(grid_size)
+    X, Y = np.meshgrid(x, y)
+
+    start, goal, obstacles = generate_world(grid_size, num_obstacles, random_seed)
+
+    potential = calculate_overall_potential(grid_size, obstacles, obstacle_radius, goal)
+
+    dU_dx, dU_dy = calculate_grad(potential)
+
+    path = potential_field_planner(start, goal, dU_dx, dU_dy, step_size, grid_size)
+
+    path_x, path_y = np.array(path)[:, 0], np.array(path)[:, 1]
+    path_z = []
+    for x, y in zip(path_x, path_y):
+        z = bilinear_interpolation(potential, x, y)
+        path_z.append(z)
+
+    return X, Y, potential, path_x, path_y, path_z, start, goal
+
 grid_size = 100
 num_obstacles = 10
 obstacle_radius = 3
 random_seed = 42 # Change this to change random layout of obstacles
 step_size = 0.005
 
-main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size)
+X, Y, potential, path_x, path_y, path_z, start, goal = main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size)
+visualise_potential_planner(X, Y, potential, path_x, path_y, path_z, start, goal)

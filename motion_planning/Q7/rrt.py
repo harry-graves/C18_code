@@ -1,0 +1,153 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def add_sample(grid_size):
+
+    x = np.random.random_sample() * grid_size
+    y = np.random.random_sample() * grid_size
+
+    return tuple(x, y)
+
+def add_new_node(nearest_node, sample, max_distance):
+
+    direction = np.array(sample) - np.array(nearest_node)
+    length = np.linalg.norm(direction)
+    if length < max_distance:
+        return tuple(sample)
+    direction = (direction / length) * max_distance
+    new_node = np.array(nearest_node) + direction
+
+    return tuple(new_node)
+
+def sample_collision_check(sample, obstacles):
+
+    for (x_min, y_min, x_max, y_max) in obstacles:
+        if x_min <= sample[0] <= x_max and y_min <= sample[1] <= y_max:
+            return True
+        
+    return False
+
+def find_nearest_node(nodes, sample, grid_size):
+
+    distance = grid_size
+    for node in nodes:
+        new_distance = np.norm(node - sample)
+        if new_distance < distance:
+            distance = new_distance
+            nearest_node = node
+
+    return nearest_node
+
+def edge_collision_check(vertex_1, vertex_2, obstacles, step_size = 0.1):
+    """
+    Checks if the edge from start to end collides with any obstacle.
+    Uses small step increments to sample along the line.
+    """
+    x1, y1 = vertex_1
+    x2, y2 = vertex_2
+    distance = np.linalg.norm(np.array(vertex_2) - np.array(vertex_1))
+    num_steps = int(distance / step_size)
+
+    for i in range(num_steps + 1):
+        # Interpolate point along the line
+        alpha = i / num_steps
+        x = (1 - alpha) * x1 + alpha * x2
+        y = (1 - alpha) * y1 + alpha * y2
+
+        for (x_min, y_min, width, height) in obstacles:
+            if x_min <= x <= x_min + width and y_min <= y <= y_min + height:
+                return True
+
+    return False
+
+def rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_size, max_iterations):
+
+    nodes = [start]
+    distance_to_goal = np.linalg.norm(start - goal)
+    i = 0
+    came_from = {start: None}
+
+    while distance_to_goal > max_distance:
+
+        sample = add_sample(grid_size)
+        collision = sample_collision_check(sample, obstacles)
+        if collision == True:
+            continue
+
+        nearest_node = find_nearest_node(nodes, sample, grid_size)
+        new_node = add_new_node(nearest_node, sample, max_distance)
+        collision = edge_collision_check(new_node, nearest_node, obstacles, edge_collision_check_size)
+        if collision == True:
+            continue
+
+        nodes.append(new_node)
+        came_from[new_node] = nearest_node
+
+        distance_to_goal = np.linalg.norm(new_node - goal)
+        if distance_to_goal < max_distance:
+            nodes.append(goal)
+            came_from[goal] = new_node
+            break
+        i+=1
+        if i >= max_iterations:
+            print("Exceeded max iterations!")
+            break
+
+    path = [goal]
+    if goal in came_from:
+        while path[-1] != start:
+            path.append(came_from[path[-1]])
+        path.reverse()
+
+    else:
+        path = None
+        print("Could not find a path!")
+    
+    return nodes, path
+
+def visualize_rrt(grid_size, start, goal, obstacles, nodes, path):
+    """
+    Visualizes the RRT tree, obstacles, and the final path.
+    """
+    fig, ax = plt.subplots(figsize=(8, 8))
+    
+    # Plot obstacles
+    for (x_min, y_min, width, height) in obstacles:
+        ax.add_patch(plt.Rectangle((x_min, y_min), width, height, color='gray'))
+
+    # Plot all RRT nodes
+    for node in nodes:
+        ax.scatter(node[0], node[1], color='blue', s=5)  # Small blue dots
+
+    # Plot edges (tree structure)
+    for child, parent in parent_map.items():
+        if parent is not None:
+            plt.plot([parent[0], child[0]], [parent[1], child[1]], color="blue", linewidth=0.5)
+
+    # Plot path if found
+    if path:
+        px, py = zip(*path)
+        ax.plot(px, py, color="red", linewidth=2, marker="o", markersize=5, label="Path")
+
+    # Mark start and goal
+    ax.scatter(*start, color="green", s=100, label="Start", edgecolors="black")
+    ax.scatter(*goal, color="red", s=100, label="Goal", edgecolors="black")
+
+    # Formatting
+    ax.set_xlim(0, grid_size)
+    ax.set_ylim(0, grid_size)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_title("RRT Pathfinding")
+    ax.legend()
+    plt.show()
+
+grid_size = 19
+start = np.array((4, 9))
+goal = np.array((14, 9))
+obstacles = [(9, 4, 10, 14)]
+max_distance = 1
+edge_collision_check_size = 0.2
+max_iterations = 1000
+nodes, path = rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_size, max_iterations)
+visualize_rrt(grid_size, start, goal, obstacles, nodes, path)

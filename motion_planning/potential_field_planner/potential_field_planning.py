@@ -198,7 +198,7 @@ def main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size):
 grid_size = 100
 num_obstacles = 10
 obstacle_radius = 3
-random_seed = 300
+random_seed = 42 # Change this to change random layout of obstacles
 step_size = 0.005
 
 main(grid_size, num_obstacles, obstacle_radius, random_seed, step_size)

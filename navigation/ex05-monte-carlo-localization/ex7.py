@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-import pickle
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -103,24 +101,96 @@ def forward_motion_model(x_robo, del_rot_1, del_trans, del_rot_2):
     # TODO: return x, y, theta in homogeneous coordinates!
     return 0
 
+def wrap_angle(angle):
+    """Wraps an angle to the range [-π, π]."""
+    return (angle + np.pi) % (2 * np.pi) - np.pi
+
+def sample(b):
+    tot = 0
+    for _ in range(12):
+        tot += np.random.uniform(-0.5, 0.5)  # Sum 12 uniform samples
+    
+    return tot * b
+
+def inverse_motion_model(prev_pose, cur_pose):
+     
+    x1, y1, theta1 = prev_pose
+    x2, y2, theta2 = cur_pose
+
+    rot1 = np.arctan2(y2 - y1, x2 - x1) - theta1
+    rot1 = wrap_angle(rot1)
+
+    trans = np.sqrt((x1 - x2)**2 + (y2 - y1)**2)
+
+    rot2 = theta2 - theta1 - rot1
+    rot2 = wrap_angle(rot2)
+
+    return rot1, trans, rot2
 
 def sample_motion_model_odometry(x_robo_prev, u, noise_parameters):
     
-    # TODO
-    
-    return x_t
+    a1, a2, a3, a4 = noise_parameters
+    odom_prev_pose, odom_cur_pose = u
+    x, y, theta = x_robo_prev
 
+    rot1, trans, rot2 = inverse_motion_model(odom_prev_pose, odom_cur_pose)
+
+    rot1_hat = rot1 - sample(a1*rot1**2 + a2*trans**2)
+    trans_hat = trans - sample(a3*trans**2 + a4*rot1**2 + a4*rot2**2)
+    rot2_hat = rot2 - sample(a1*rot2**2 + a2*trans**2)
+
+    x_prime = x + trans_hat * np.cos(theta + rot1_hat)
+    y_prime = y + trans_hat * np.sin(theta + rot1_hat)
+    theta_prime = theta + rot1_hat + rot2_hat
+    theta_prime = wrap_angle(theta_prime)
+    
+    return x_prime, y_prime, theta_prime
 
 def compute_weights(x_pose, z_obs, gridmap, likelihood_map, map_res):
-    
-    # TODO
-    
-    return weight
+    num_particles = x_pose.shape[0]
+    weights = np.zeros(num_particles)
 
+    for i in range(num_particles):
+        # Convert sensor readings into map coordinates
+        m_points = ranges2cells(z_obs[1, :], z_obs[0, :], x_pose[i, :3], gridmap, map_res)
 
-def resample(particles, weights, gridmap):
+        # Filter out points that fall outside the map bounds
+        valid_mask = (m_points[0] >= 0) & (m_points[0] < gridmap.shape[1]) & \
+                     (m_points[1] >= 0) & (m_points[1] < gridmap.shape[0])
+        valid_points = m_points[:, valid_mask]
+
+        # Extract likelihood values for valid points
+        likelihood_values = likelihood_map[valid_points[1], valid_points[0]]
+
+        # Compute weight as product of likelihoods
+        weights[i] = np.prod(likelihood_values) if likelihood_values.size > 0 else 1e-10  # Avoid zero weight
+
+    # Normalize weights to sum to 1
+    weights += 1e-10  # Avoid division by zero
+    weights /= np.sum(weights)
+
+    return weights
+
+def resample(particles, weights):
+    num_particles = len(particles)
+    resampled_particles = np.zeros_like(particles)
     
-    # TODO: low-variance resampling
+    # Normalize weights
+    weights /= np.sum(weights)
+    
+    # Compute cumulative sum
+    cumulative_sum = np.cumsum(weights)
+    
+    # Draw a random starting point
+    start = np.random.uniform(0, 1 / num_particles)
+    
+    # Systematic resampling
+    index = 0
+    for i in range(num_particles):
+        u = start + i / num_particles
+        while u > cumulative_sum[index]:
+            index += 1
+        resampled_particles[i] = particles[index]
     
     return resampled_particles
 
@@ -128,5 +198,28 @@ def resample(particles, weights, gridmap):
 def mc_localization(odom, z, num_particles, particles, noise, gridmap, likelihood_map, map_res, img_map):
 
     # TODO
+
+    return particles
+
+def mc_localization(odom, z, num_particles, particles, noise, gridmap, likelihood_map, map_res, img_map):
+    for t in range(1, len(odom)):  # Start from 1 since t=0 has no previous pose
+        odom_prev_pose = odom[t - 1]
+        odom_cur_pose = odom[t]
+        u = (odom_prev_pose, odom_cur_pose)  # Construct (prev, cur) tuple
+
+        for i in range(num_particles):
+            particles[i, :3] = sample_motion_model_odometry(particles[i, :3], u, noise)
+
+        # Compute weights
+        weights = np.zeros(num_particles)
+        for i in range(num_particles):
+            weights[i] = compute_weights(particles[i, :3], z[t], gridmap, likelihood_map, map_res)
+        
+        # Normalize weights
+        weights += 1e-300  # Avoid division by zero
+        weights /= np.sum(weights)
+
+        # Resample particles
+        particles = resample(particles, weights)
 
     return particles

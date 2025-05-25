@@ -180,17 +180,21 @@ def visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from):
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_title("RRT Pathfinding")
-    ax.legend()
+    ax.legend(loc='upper right')
     plt.show()
 
-grid_size = 19
-start = (4.5, 9.5) # Add 0.5 to be in the middle of the square
-goal = (14.5, 9.5)
-# obstacles = [(9, 1, 10, 18)]  # (x_min, y_min, x_max, y_max)
-obstacles = [(2, 6, 8, 7), (2, 12, 8, 13), (7, 7, 8, 12)]
-max_distance = 1
-edge_collision_check_size = 0.05
-max_iterations = 1000
+def main():
+    grid_size = 19
+    start = (4.5, 9.5) # Add 0.5 to be in the middle of the square
+    goal = (14.5, 9.5)
+    # obstacles = [(9, 1, 10, 18)]  # (x_min, y_min, x_max, y_max)
+    obstacles = [(2, 6, 8, 7), (2, 12, 8, 13), (7, 7, 8, 12)]
+    max_distance = 1
+    edge_collision_check_size = 0.05
+    max_iterations = 1000
 
-nodes, path, came_from = rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_size, max_iterations)
-visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from)
+    nodes, path, came_from = rrt(grid_size, start, goal, obstacles, max_distance, edge_collision_check_size, max_iterations)
+    visualize_rrt(grid_size, start, goal, obstacles, nodes, path, came_from)
+
+if __name__ == "__main__":
+    main()

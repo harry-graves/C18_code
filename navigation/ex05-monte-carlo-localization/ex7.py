@@ -1,4 +1,6 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -68,12 +70,12 @@ def init_uniform(num_particles, img_map, map_res):
     return particles
 
 
-def plot_particles(particles, img_map, map_res):
-    plt.matshow(img_map, cmap="gray")
-    max_y = np.size(img_map, 0) - 1
-    xs = np.copy(particles[:, 0]) / map_res
-    ys = max_y - np.copy(particles[:, 1]) / map_res
-    plt.plot(xs, ys, '.b')
+def plot_particles(particles, img_map, map_res,s):
+    plt.matshow(255-img_map, cmap="Greys")
+    max_y = np.size(img_map, 0)-1
+    xs = np.copy(particles[:, 0])/map_res
+    ys = max_y - np.copy(particles[:, 1])/map_res
+    plt.plot(xs, ys, s)
     plt.xlim(0, np.size(img_map, 1))
     plt.ylim(0, np.size(img_map, 0))
     plt.show()
@@ -81,7 +83,10 @@ def plot_particles(particles, img_map, map_res):
 
 ################### solution ###################
 def wrapToPi(theta):
-    # TODO: theta between -pi and pi
+    while theta < -np.pi:
+        theta = theta + 2*np.pi
+    while theta > np.pi:
+        theta = theta - 2*np.pi
     return theta
     
     
@@ -89,137 +94,129 @@ def sample_normal_distribution(b):
     
     tot = 0
     for i in range(12):
-        pass
-        # TODO
+        tot += np.random.uniform(-b,b)
     
     return 0.5*tot
 
 
 def forward_motion_model(x_robo, del_rot_1, del_trans, del_rot_2):
    
-    # forward motion model 
-    # TODO: return x, y, theta in homogeneous coordinates!
-    return 0
-
-def wrap_angle(angle):
-    """Wraps an angle to the range [-π, π]."""
-    return (angle + np.pi) % (2 * np.pi) - np.pi
-
-def sample(b):
-    tot = 0
-    for _ in range(12):
-        tot += np.random.uniform(-0.5, 0.5)  # Sum 12 uniform samples
+   # forward motion model 
+    x_ = x_robo[0] + del_trans*np.cos(x_robo[2] + del_rot_1)
+    y_ = x_robo[1] + del_trans*np.sin(x_robo[2] + del_rot_1)
+    theta_ = wrapToPi(x_robo[2] + del_rot_1 + del_rot_2)
     
-    return tot * b
+    return np.array([x_, y_, theta_, 1])
 
-def inverse_motion_model(prev_pose, cur_pose):
-     
-    x1, y1, theta1 = prev_pose
-    x2, y2, theta2 = cur_pose
-
-    rot1 = np.arctan2(y2 - y1, x2 - x1) - theta1
-    rot1 = wrap_angle(rot1)
-
-    trans = np.sqrt((x1 - x2)**2 + (y2 - y1)**2)
-
-    rot2 = theta2 - theta1 - rot1
-    rot2 = wrap_angle(rot2)
-
-    return rot1, trans, rot2
 
 def sample_motion_model_odometry(x_robo_prev, u, noise_parameters):
     
-    a1, a2, a3, a4 = noise_parameters
-    odom_prev_pose, odom_cur_pose = u
-    x, y, theta = x_robo_prev
-
-    rot1, trans, rot2 = inverse_motion_model(odom_prev_pose, odom_cur_pose)
-
-    rot1_hat = rot1 - sample(a1*rot1**2 + a2*trans**2)
-    trans_hat = trans - sample(a3*trans**2 + a4*rot1**2 + a4*rot2**2)
-    rot2_hat = rot2 - sample(a1*rot2**2 + a2*trans**2)
-
-    x_prime = x + trans_hat * np.cos(theta + rot1_hat)
-    y_prime = y + trans_hat * np.sin(theta + rot1_hat)
-    theta_prime = theta + rot1_hat + rot2_hat
-    theta_prime = wrap_angle(theta_prime)
+    # from odometry parameters
+    del_rot_1, del_trans, del_rot_2 = u
     
-    return x_prime, y_prime, theta_prime
+    #  the relative motion values with some sampled noise
+    del_rot_1_hat = del_rot_1 - sample_normal_distribution(noise_parameters[0]*np.abs(del_rot_1) + noise_parameters[1]*np.abs(del_trans))
+    del_trans_hat = del_trans - sample_normal_distribution(noise_parameters[2]*np.abs(del_trans) + noise_parameters[3]*np.abs(del_rot_1) + noise_parameters[3]*np.abs(del_rot_2))
+    del_rot_2_hat = del_rot_2 - sample_normal_distribution(noise_parameters[0]*np.abs(del_rot_2) + noise_parameters[1]*np.abs(del_trans))
+    
+    # implementing the forward motion model
+    x_t = forward_motion_model(x_robo_prev, del_rot_1_hat, del_trans_hat, del_rot_2_hat)
+    
+    return x_t
+
 
 def compute_weights(x_pose, z_obs, gridmap, likelihood_map, map_res):
-    num_particles = x_pose.shape[0]
-    weights = np.zeros(num_particles)
+    
+    z_angles = z_obs[0,:]
+    z_ranges = z_obs[1,:]
+    
+    # observation in the gridmap
+    z_in_map = ranges2cells(z_ranges, z_angles, x_pose, gridmap, map_res)
 
-    for i in range(num_particles):
-        # Convert sensor readings into map coordinates
-        m_points = ranges2cells(z_obs[1, :], z_obs[0, :], x_pose[i, :3], gridmap, map_res)
+    z_map_y = z_in_map[0,:]
+    z_map_x = z_in_map[1,:]
+    
+    # the id where the beam lies outside the gridmap
+    idy = (z_map_y < 0) + (z_map_y > gridmap.shape[1]-1)
+    idx = (z_map_x < 0) + (z_map_x > gridmap.shape[0]-1)
+    
+    # number of instances that happens
+    num_z_out_map = np.sum(idy + idx)
+    # giving all of them the same lesser prob/ weight of 0.1
+    weight_ = np.power(0.1, num_z_out_map)
+    
+    # calculating weights from likelihood map where beam is in gridmap
+    weights = likelihood_map[z_map_x[np.logical_not(idx+idy)], z_map_y[np.logical_not(idx+idy)]]
+    
+    # final weight from product of all weights
+    weight = weight_*np.prod(weights)
+    
+    return weight
 
-        # Filter out points that fall outside the map bounds
-        valid_mask = (m_points[0] >= 0) & (m_points[0] < gridmap.shape[1]) & \
-                     (m_points[1] >= 0) & (m_points[1] < gridmap.shape[0])
-        valid_points = m_points[:, valid_mask]
-
-        # Extract likelihood values for valid points
-        likelihood_values = likelihood_map[valid_points[1], valid_points[0]]
-
-        # Compute weight as product of likelihoods
-        weights[i] = np.prod(likelihood_values) if likelihood_values.size > 0 else 1e-10  # Avoid zero weight
-
-    # Normalize weights to sum to 1
-    weights += 1e-10  # Avoid division by zero
-    weights /= np.sum(weights)
-
-    return weights
 
 def resample(particles, weights):
-    num_particles = len(particles)
-    resampled_particles = np.zeros_like(particles)
-    
-    # Normalize weights
-    weights /= np.sum(weights)
-    
-    # Compute cumulative sum
+    """
+    Perform low-variance resampling on a set of particles using their importance weights.
+
+    This method generates a new set of particles by selecting from the original ones
+    with replacement, in proportion to their weights. It uses the low-variance resampling 
+    technique, which minimizes the variance in the number of times a particle is selected,
+    improving the stability and performance of particle filters.
+
+    Parameters:
+    ----------
+    particles : ndarray of shape (N, D)
+        The current set of particles, where N is the number of particles and D is the dimension
+        of each particle (typically 4: x, y, theta, weight).
+
+    weights : ndarray of shape (N,)
+        Normalized importance weights for each particle (must sum to 1).
+
+    Returns:
+    -------
+    resampled_particles : ndarray of shape (N, D)
+        A new set of particles resampled according to the input weights.
+    """
+    N = len(weights)
+    positions = (np.arange(N) + np.random.uniform(0, 1)) / N
     cumulative_sum = np.cumsum(weights)
-    
-    # Draw a random starting point
-    start = np.random.uniform(0, 1 / num_particles)
-    
-    # Systematic resampling
-    index = 0
-    for i in range(num_particles):
-        u = start + i / num_particles
-        while u > cumulative_sum[index]:
-            index += 1
-        resampled_particles[i] = particles[index]
-    
+    indexes = np.zeros(N, dtype=int)
+
+    i, j = 0, 0
+    while i < N:
+        if positions[i] < cumulative_sum[j]:
+            indexes[i] = j
+            i += 1
+        else:
+            j += 1
+
+    resampled_particles = particles[indexes]
     return resampled_particles
 
-
 def mc_localization(odom, z, num_particles, particles, noise, gridmap, likelihood_map, map_res, img_map):
 
-    # TODO
+    # executing for the odometry sequence
+    for i in range(len(odom)):        
+        weights = np.array([])
+        odom_inst = odom[i]
+        z_obs = z[i]
 
-    return particles
-
-def mc_localization(odom, z, num_particles, particles, noise, gridmap, likelihood_map, map_res, img_map):
-    for t in range(1, len(odom)):  # Start from 1 since t=0 has no previous pose
-        odom_prev_pose = odom[t - 1]
-        odom_cur_pose = odom[t]
-        u = (odom_prev_pose, odom_cur_pose)  # Construct (prev, cur) tuple
-
-        for i in range(num_particles):
-            particles[i, :3] = sample_motion_model_odometry(particles[i, :3], u, noise)
-
-        # Compute weights
-        weights = np.zeros(num_particles)
-        for i in range(num_particles):
-            weights[i] = compute_weights(particles[i, :3], z[t], gridmap, likelihood_map, map_res)
+        # executing for all the particles in loop
+        for m in range(num_particles):
+            # forward motion model
+            particles[m,:] = sample_motion_model_odometry(particles[m,:], odom_inst, noise)
+            # weight computation
+            weight = compute_weights(particles[m,:], z_obs, gridmap, likelihood_map, map_res)
+            weights = np.append(weights, weight)
         
-        # Normalize weights
-        weights += 1e-300  # Avoid division by zero
-        weights /= np.sum(weights)
+        # normalise the weights    
+        weights = weights/np.sum(weights)
+        
+        # low variance resampling
+        resampled_particles = resample(particles, weights)
 
-        # Resample particles
-        particles = resample(particles, weights)
+        particles = resampled_particles
+        
+        plot_particles(particles, img_map, map_res, '.b')
 
     return particles
